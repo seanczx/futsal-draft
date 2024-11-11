@@ -1,4 +1,47 @@
 function App() {
+  const [players, setPlayers] = React.useState('');
+  const [availablePlayers, setAvailablePlayers] = React.useState([]);
+  const [teams, setTeams] = React.useState({
+    'Team 1': [],
+    'Team 2': [],
+    'Team 3': []
+  });
+  const [currentPick, setCurrentPick] = React.useState(1);
+  const [isDraftStarted, setIsDraftStarted] = React.useState(false);
+
+  const getCurrentTeam = (pickNumber) => {
+    const round = Math.floor((pickNumber - 1) / 3);
+    const isReverseRound = round % 2 === 1;
+    const position = (pickNumber - 1) % 3;
+    
+    if (isReverseRound) {
+      return `Team ${3 - position}`;
+    }
+    return `Team ${position + 1}`;
+  };
+
+  const startDraft = () => {
+    const playerList = players.split('\n').filter(player => player.trim() !== '');
+    if (playerList.length !== 21) {
+      alert('Please enter exactly 21 players (one per line)');
+      return;
+    }
+    setAvailablePlayers(playerList);
+    setIsDraftStarted(true);
+  };
+
+  const selectPlayer = (player) => {
+    const currentTeam = getCurrentTeam(currentPick);
+    setTeams(prev => ({
+      ...prev,
+      [currentTeam]: [...prev[currentTeam], player]
+    }));
+    setAvailablePlayers(prev => prev.filter(p => p !== player));
+    setCurrentPick(prev => prev + 1);
+  };
+
+  if (!isDraftStarted) {
+    return (
       <div className="p-4 max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold mb-4">Futsal Draft System</h1>
         <div className="mb-4">
@@ -34,7 +77,6 @@ function App() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Available Players */}
         <div className="border rounded p-4">
           <h2 className="text-lg font-semibold mb-2">Available Players</h2>
           <div className="space-y-2">
@@ -50,7 +92,6 @@ function App() {
           </div>
         </div>
 
-        {/* Teams */}
         <div className="space-y-4">
           {Object.entries(teams).map(([teamName, teamPlayers]) => (
             <div key={teamName} className="border rounded p-4">
