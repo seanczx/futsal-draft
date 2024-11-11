@@ -7,10 +7,173 @@
     <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.x.x/firebase-database-compat.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body>
     <div id="root"></div>
-    <script type="text/babel" src="app.js"></script>
-</body>
-</html>
+    <script type="text/babel">
+    // Initialize Firebase with your configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyBahrbntIeiJPQa65A7_O1q5WI5UlIMFvI",
+        authDomain: "futsal-draft.firebaseapp.com",
+        projectId: "futsal-draft",
+        storageBucket: "futsal-draft.firebasestorage.app",
+        messagingSenderId: "566596451257",
+        appId: "1:566596451257:web:b547f0d8a1c6180e25d468",
+        measurementId: "G-HNMNPBPJRR",
+        databaseURL: "https://futsal-draft-default-rtdb.asia-southeast1.firebasedatabase.app" // Add this line
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    function App() {
+        const [players, setPlayers] = React.useState('');
+        const [availablePlayers, setAvailablePlayers] = React.useState([]);
+        const [teams, setTeams] = React.useState({
+            'Team 1': [],
+            'Team 2': [],
+            'Team 3': []
+        });
+        const [currentPick, setCurrentPick] = React.useState(1);
+        const [isDraftStarted, setIsDraftStarted] = React.useState(false);
+        const [sessionId, setSessionId] = React.useState('');
+        const [isAdmin, setIsAdmin] = React.useState(false);
+
+        React.useEffect(() => {
+            // Check if there's a session ID in the URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const session = urlParams.get('session');
+            
+            if (session) {
+                setSessionId(session);
+                // Listen for real-time updates
+                database.ref(`sessions/${session}`).on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        setAvailablePlayers(data.availablePlayers || []);
+                        setTeams(data.teams || {
+                            'Team 1': [],
+                            'Team 2': [],
+                            'Team 3': []
+                        });
+                        setCurrentPick(data.currentPick || 1);
+                        setIsDraftStarted(data.isDraftStarted || false);
+                    }
+                });
+            }
+        }, []);
+
+        const createNewSession = () => {
+            const newSessionId = Math.random().toString(36).substr(2, 9);
+            setSessionId(newSessionId);
+            setIsAdmin(true);
+            // Update URL with session ID
+            window.history.pushState({}, '', `?session=${newSessionId}`);
+        };
+
+        const startDraft = () => {
+            const playerList = players.split('\n').filter(player => player.trim() !== '');
+            if (playerList.length !== 21) {
+                alert('Please enter exactly 21 players (one per line)');
+                return;
+            }
+            
+            // Save initial state to Firebase
+            database.ref(`sessions/${sessionId}`).set({
+                availablePlayers: playerList,
+                teams: {
+                    'Team 1': [],
+                    'Team 2': [],
+                    'Team 3': []
+                },
+                currentPick: 1,
+                isDraftStarted: true
+            });
+        };
+
+        const selectPlayer = (player) => {
+            const currentTeam = getCurrentTeam(currentPick);
+            const newTeams = {
+                ...teams,
+                [currentTeam]: [...teams[currentTeam], player]
+            };
+            const newAvailablePlayers = availablePlayers.filter(p => p !== player);
+            
+            // Update Firebase
+            database.ref(`sessions/${sessionId}`).update({
+                teams: newTeams,
+                availablePlayers: newAvailablePlayers,
+                currentPick: currentPick + 1
+            });
+        };
+
+        const getCurrentTeam = (pickNumber) => {
+            const round = Math.floor((pickNumber - 1) / 3);
+            const isReverseRound = round % 2 === 1;
+            const position = (pickNumber - 1) % 3;
+            
+            if (isReverseRound) {
+                return `Team ${3 - position}`;
+            }
+            return `Team ${position + 1}`;
+        };
+
+        if (!sessionId) {
+            return (
+                <div className="p-4 max-w-2xl mx-auto">
+                    <h1 className="text-2xl font-bold mb-4">Futsal Draft System</h1>
+                    <button
+                        className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                        onClick={createNewSession}
+                    >
+                        Create New Draft Session
+                    </button>
+                </div>
+            );
+        }
+
+        if (!isDraftStarted) {
+            return (
+                <div className="p-4 max-w-2xl mx-auto">
+                    <h1 className="text-2xl font-bold mb-4">Futsal Draft System</h1>
+                    <p className="mb-4">Session ID: {sessionId}</p>
+                    <p className="mb-4">Share this URL with other captains:</p>
+                    <input
+                        className="w-full p-2 border rounded mb-4"
+                        value={window.location.href}
+                        readOnly
+                    />
+                    {isAdmin && (
+                        <>
+                            <div className="mb-4">
+                                <label className="block mb-2">
+                                    Enter 21 players (one per line):
+                                    <textarea
+                                        className="w-full h-48 p-2 border rounded"
+                                        value={players}
+                                        onChange={(e) => setPlayers(e.target.value)}
+                                        placeholder="Player 1&#10;Player 2&#10;Player 3..."
+                                    />
+                                </label>
+                            </div>
+                            <button
+                                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                                onClick={startDraft}
+                            >
+                                Start Draft
+                            </button>
+                        </>
+                    )}
+                    {!isAdmin && (
+                        <p>Waiting for admin to start the draft...</p>
+                    )}
+                </div>
+            );
+        }
+
+        return (
+            <div className="p-4 max-w-4xl mx-auto">
+                <h1 className="text-
